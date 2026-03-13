@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Аналитический дашборд МФМ 2026 — книжный</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+<style>
+/* ═══════════════════════════════════════════
+   ТОКЕНЫ
+═══════════════════════════════════════════ */
+:root {
+  --blue:       #252167;
+  --green:      #339130;
+  --blue-light: rgba(37,33,103,0.35);
+  --yellow:     #FBBA00;
+  --emerald:    #00A552;
+  --border:     rgba(0,0,0,0.08);
+  --divider:    rgba(0,0,0,0.06);
+  --text:       #0D0802;
+  --muted:      rgba(13,8,2,0.45);
+  --bg:         #f7f7f9;
+  --card-bg:    #ffffff;
+  --radius:     10px;
+  --shadow:     0 1px 4px rgba(0,0,0,0.06);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Книжная ширина — A3 portrait с полями 8mm ≈ 1062px */
+.dash-root {
+  width: 1040px;
+  margin: 0 auto;
+  padding: 14px 18px 20px;
+}
+
+/* ═══════════════════════════════════════════
+   ШАПКА
+═══════════════════════════════════════════ */
+.header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 3px; flex-wrap: wrap; }
+.header h1 { font-size: 20px; font-weight: 800; }
+.header .date { color: red; font-size: 20px; font-weight: 800; }
+.subheader { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+
+/* ═══════════════════════════════════════════
+   КАРТОЧКИ
+═══════════════════════════════════════════ */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════
+   ВЕРХНЯЯ ПОЛОСА: hero слева, Россия справа
+═══════════════════════════════════════════ */
+.top-row {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 10px;
+}
+/* Hero внутри top-row — фиксированная ширина */
+.top-row .hero-card {
+  flex: 0 0 230px;
+  margin-bottom: 0;
+  overflow: auto;
+}
+/* Россия занимает остаток ширины */
+.top-row .zone-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.top-row .zone-inner {
+  flex: 1;
+}
+.top-row .zone-inner .card {
+  display: flex;
+  flex-direction: column;
+}
+.top-row .zone-inner .tbl-card table {
+  flex: 1;
+}
+
+/* ═══════════════════════════════════════════
+   HERO-CARD — вертикальный внутри top-row
+═══════════════════════════════════════════ */
+.hero-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 14px 14px;
+  height: auto;
+}
+.hero-left  { display: flex; flex-direction: column; flex-shrink: 0; }
+.hero-right { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; min-width: 0; flex-shrink: 0; }
+
+.hero-label {
+  font-size: 12px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); margin-bottom: 2px;
+}
+.hero-value {
+  font-size: 40px; font-weight: 900; line-height: 1;
+  letter-spacing: -1px; margin-bottom: 7px; white-space: nowrap;
+}
+.hero-divider { height: 1px; background: var(--divider); margin-bottom: 8px; }
+.hero-ages { display: flex; gap: 14px; margin-bottom: 8px; }
+.hero-age-label { font-size: 8px; font-weight: 700; color: var(--muted); display: block; margin-bottom: 1px; }
+.hero-age-val { font-size: 16px; font-weight: 800; line-height: 1; white-space: nowrap; }
+
+/* Динамика */
+.hero-dynamics { display: flex; flex-direction: column; gap: 4px; }
+.dyn-divider { height: 1px; background: var(--divider); margin: 5px 0; }
+.dyn-row {
+  display: flex; align-items: baseline;
+  justify-content: space-between; gap: 6px;
+}
+.dyn-label { font-size: 8px; font-weight: 700; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+.dyn-val   { font-size: 12px; font-weight: 800; white-space: nowrap; color: var(--text); }
+.dyn-delta {
+  font-size: 8px; font-weight: 700; white-space: nowrap;
+  padding: 1px 5px; border-radius: 3px;
+}
+.dyn-delta.pos { color: #1a7a35; background: rgba(0,165,82,0.12); }
+.dyn-delta.neg { color: #b91c1c; background: rgba(185,28,28,0.10); }
+.dyn-delta.neu { color: var(--muted); background: rgba(0,0,0,0.05); }
+
+/* Спарклайн */
+.spark-wrap { }
+.spark-label {
+  font-size: 7px; font-weight: 700; color: black;
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px;
+}
+.spark-svg { display: block; width: 100%; overflow: visible; }
+
+/* Блок дня недели */
+.dow-wrap {
+  padding: 6px 8px;
+  background: rgba(37,33,103,0.05);
+  border-radius: 6px;
+  border-left: 2px solid var(--blue);
+}
+.dow-title {
+  font-size: 7px; font-weight: 700; color: black;
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: 3px;
+}
+.dow-row { display: flex; align-items: center; gap: 8px; }
+.dow-val { font-size: 13px; font-weight: 800; color: var(--text); }
+.dow-sub { font-size: 8px; color: var(--muted); display: block; margin-bottom: 1px; }
+.dow-arrow { font-size: 11px; color: #ccc; }
+
+/* ═══════════════════════════════════════════
+   ЗОНЫ РОССИЯ и МИР — вертикальный поток
+═══════════════════════════════════════════ */
+.story-zone { display: flex; flex-direction: column; gap: 10px; }
+
+.zone-panel { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.zone-label {
+  font-size: 11px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .08em; color: black; padding: 0 2px;
+}
+.zone-inner { display: flex; gap: 8px; align-items: stretch; }
+
+/* ═══════════════════════════════════════════
+   ТАБЛИЦЫ
+═══════════════════════════════════════════ */
+.tbl-card {
+  padding: 9px 11px; flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.tbl-title {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--muted); margin-bottom: 5px;
+}
+table { width: 100%; border-collapse: collapse; }
+td {
+  padding: 2.5px 0; font-size: 10.5px;
+  border-bottom: 1px solid #f0f0f0; vertical-align: middle;
+}
+td:first-child {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 180px; padding-right: 5px; color: var(--text);
+}
+td:last-child { width: 55%; }
+.bar-cell { display: flex; align-items: center; gap: 7px; }
+.bar-num  { font-weight: 700; white-space: nowrap; flex-shrink: 0; font-size: 10.5px; width: 42px; text-align: right; }
+.bar-track { width: 100%; flex-shrink: 1; height: 5px; background: #e8e8ee; border-radius: 3px; }
+.bar-fill  { height: 100%; background: var(--blue); border-radius: 3px; }
+.rank-num  { font-size: 9px; font-weight: 700; color: #bbb; width: 14px; text-align: right; flex-shrink: 0; }
+.total-row td { font-size: 12px !important; font-weight: 800 !important; border-bottom: 2px solid #ddd; white-space: nowrap; }
+.total-row .bar-num { font-size: 12px !important; }
+
+/* Доп. карточки */
+.extra-cards { display: flex; flex-direction: row; gap: 8px; }
+.extra-card  { padding: 9px 11px; }
+.extra-title { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; color: var(--text); margin-bottom: 4px; line-height: 1.3; }
+.extra-line  { height: 2px; background: var(--blue-light); border-radius: 1px; margin-bottom: 5px; }
+.extra-sub   { font-size: 9.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 1px; }
+.extra-value { font-size: 24px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+.extra-divider { height: 1px; background: var(--divider); margin-bottom: 4px; }
+.extra-meta   { font-size: 10px; color: var(--muted); font-weight: 600; margin-bottom: 1px; }
+.extra-meta-val { font-size: 16px; font-weight: 800; color: #328D36; }
+
+/* Rank-таблицы */
+.rank-table { width: 100%; border-collapse: collapse; flex: 1; }
+.rank-table td { padding: 2.5px 2px; font-size: 10.5px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+.rank-table td:nth-child(2) { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px; color: var(--text); }
+.rank-table td:nth-child(3) { text-align: right; font-weight: 700; white-space: nowrap; }
+
+/* ═══════════════════════════════════════════
+   РАЗДЕЛИТЕЛЬ
+═══════════════════════════════════════════ */
+.section-divider {
+  display: flex; align-items: center; gap: 12px; margin: 12px 0 10px;
+}
+.section-divider::before, .section-divider::after {
+  content: ''; flex: 1; height: 1px; background: #d8d8d8;
+}
+.section-divider-label {
+  font-size: 10.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .1em; color: black; white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════
+   ДЕТАЛИЗАЦИЯ
+═══════════════════════════════════════════ */
+.detail-zone { display: flex; flex-direction: column; gap: 5px; }
+.detail-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 5px;
+  align-items: stretch;
+}
+.detail-row .stat-card {
+  flex: 0 0 160px;
+  width: 160px;
+}
+.detail-row .chart-card {
+  flex: 1 1 0;          /* график занимает остаток */
+  min-width: 180px;
+  overflow: visible;
+}
+
+.stat-card { padding: 8px 10px; display: flex; flex-direction: column; min-width: 0; }
+.stat-tag {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 6.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; color: #fff; margin-bottom: 5px; width: fit-content;
+}
+.stat-category { font-size: 7px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+.stat-value    { font-size: 20px; font-weight: 900; line-height: 1; margin-bottom: 4px; }
+.stat-divider  { height: 1px; background: var(--divider); margin-bottom: 4px; }
+.stat-ages     { display: flex; gap: 8px; }
+.stat-age-label { font-size: 7px; font-weight: 700; color: var(--muted); display: block; }
+.stat-age-val  { font-size: 12px; font-weight: 800; line-height: 1; }
+
+/* Пирамида */
+.chart-card {
+  padding: 6px 10px 8px; display: flex; flex-direction: column;
+  justify-content: center; min-width: 0; overflow: visible;
+}
+.chart-title {
+  display: none;
+}
+.pyr-age-labels { display: flex; gap: 2px; margin-bottom: 3px; }
+.pyr-age-label  {
+  font-size: 7.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; flex: 1; text-align: center;
+}
+.pyr-bar {
+  display: flex; align-items: center; justify-content: center;
+  height: 24px; min-width: 24px; overflow: visible; flex-shrink: 0;
+}
+.pyr-bar-left  { border-radius: 4px 0 0 4px; justify-content: flex-end; }
+.pyr-bar-right { border-radius: 0 4px 4px 0; justify-content: flex-start; }
+.pyr-label {
+  font-size: 9px; font-weight: 800; color: #111; white-space: nowrap;
+  background: rgba(255,255,255,0.88); border: 1px solid rgba(0,0,0,0.18);
+  border-radius: 3px; padding: 1px 5px; line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12); position: relative; z-index: 1;
+}
+.pyr-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; width: 100%; }
+.pyr-row:last-child { margin-bottom: 0; }
+.pyr-row-label {
+  font-size: 7px; font-weight: 700; color: #bbb;
+  width: 40px; flex-shrink: 0; text-align: right; white-space: nowrap;
+}
+
+.num { font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+
+/* ═══════════════════════════════════════════
+   ПЕЧАТЬ — A3 portrait (основной) / A4 (с zoom)
+   
+   A3 portrait, margin 8mm: доступно ~1062 × 1510px
+   A4 portrait, margin 8mm: доступно  ~778 × 1107px
+   
+   Контент .dash-root = 1040px wide × ~1380px tall
+   
+   A3: zoom = 1062/1040 = 1.02 → 1.0 (влезает без масштаба)
+   A4: zoom = 778/1040 = 0.748 → 0.74
+       высота = 1380 × 0.74 = 1021px < 1107px ✓
+═══════════════════════════════════════════ */
+@media print {
+  @page {
+    size: A3 portrait;
+    margin: 8mm;
+  }
+
+  *, *::before, *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  } 
+
+  html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; height: auto !important; }
+  body { overflow: visible !important; }
+
+  #fileInput, input[type="file"] { display: none !important; }
+  #loadBar { display: none !important; }
+  .dash-root {
+    width: 1040px !important;
+    padding: 6px 10px 8px !important;
+    margin: 0 !important;
+    zoom: 0.82;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Запрет разрыва страниц — всё на одну страницу */
+  * {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    break-before: avoid !important;
+    page-break-before: avoid !important;
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+
+  .card, .hero-card, .tbl-card, .extra-card, .stat-card, .chart-card {
+    box-shadow: none !important;
+    border: 0.5px solid rgba(0,0,0,0.2) !important;
+  }
+
+  /* Отступы */
+  .story-zone  { gap: 7px !important; }
+  .detail-zone { gap: 4px !important; }
+  .detail-row  { gap: 4px !important; }
+  .zone-inner  { gap: 6px !important; }
+  .extra-cards { gap: 6px !important; }
+  .section-divider { margin: 8px 0 6px !important; }
+  .hero-card   { padding: 10px 11px !important; margin-bottom: 0 !important; }
+
+  /* Top-row */
+  .top-row { gap: 7px !important; margin-bottom: 7px !important; }
+  .top-row .hero-card { flex: 0 0 210px !important; }
+
+  /* Шапка */
+  .header h1, .header .date { font-size: 16px !important; }
+  .subheader { margin-bottom: 5px !important; font-size: 9px !important; }
+
+  /* Hero */
+  .hero-value    { font-size: 32px !important; margin-bottom: 5px !important; }
+  .hero-age-val  { font-size: 13px !important; }
+  .hero-card     { padding: 10px 12px !important; }
+
+  /* Таблицы */
+  td           { font-size: 8.5px !important; padding: 1.5px 0 !important; }
+  .bar-num     { font-size: 8.5px !important; width: 34px !important; }
+  .bar-track   { width: 100%; flex-shrink: 1; height: 5px; background: #e8e8ee; border-radius: 3px; }
+  .tbl-card    { padding: 7px 9px !important; }
+  .tbl-title   { font-size: 10.5px !important; margin-bottom: 3px !important; }
+  .zone-label  { font-size: 11px !important; }
+  .total-row td { font-size: 10px !important; }
+  .total-row .bar-num { font-size: 10px !important; }
+  .rank-table td { font-size: 8.5px !important; padding: 1px 2px !important; }
+
+  /* Доп карточки */
+  .extra-card   { padding: 7px 9px !important; }
+  .extra-value  { font-size: 17px !important; }
+  .extra-meta-val { font-size: 13px !important; }
+
+  /* Детализация */
+  .stat-card   { padding: 5px 8px !important; }
+  .stat-value  { font-size: 16px !important; margin-bottom: 3px !important; }
+  .stat-age-val { font-size: 10px !important; }
+  .stat-tag {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 6.5px; font-weight: 800; text-transform: uppercase;
+  letter-spacing: .04em; color: #fff; margin-bottom: 5px; width: fit-content;
+}
+  .stat-category { font-size: 6.5px !important; }
+  .stat-divider  { margin-bottom: 3px !important; }
+
+  /* Пирамида */
+  .chart-card  { padding: 4px 8px 6px !important; }
+  .chart-title { font-size: 7px !important; margin-bottom: 3px !important; }
+  .pyr-bar     { height: 19px !important; }
+  .pyr-label   { font-size: 9px !important; padding: 1px 3px !important; }
+  .pyr-row     { margin-bottom: 2px !important; }
+  .pyr-row-label { font-size: 6.5px !important; width: 34px !important; }
+  .pyr-age-label { font-size: 6.5px !important; }
+  .pyr-age-labels { margin-bottom: 2px !important; }
+
+  /* Динамика / спарклайн */
+  .dyn-val   { font-size: 12px !important; }
+  .dyn-label { font-size: 8px !important; }
+  .dyn-delta { font-size: 8px !important; padding: 0 3px !important; }
+  .spark-label, .dow-title, .dow-sub { font-size: 7px !important; }
+  .dow-val   { font-size: 13px !important; }
+  .dow-wrap  { padding: 4px 6px !important; }
+  .spark-wrap { margin-top: 0 !important; }
+  /* Заголовки строк детализации при печати */
+  .detail-row-title { font-size: 9px !important; margin: 6px 0 3px !important; }
+}
+
+/* ═══════════════════════════════════════════
+   КЛАСС A4 — добавьте к body для печати на A4
+   <body class="a4"> и поменяйте @page size: A4 portrait
+═══════════════════════════════════════════ */
+.a4-print .dash-root { zoom: 0.74 !important; }
+/* ═══ Заголовки строк детализации ═══ */
+.detail-row-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin: 10px 0 4px;
+  padding: 0 2px;
+}
+.detail-row-title:first-child { margin-top: 0; }
+
+
+/* Обёртка значение + дельта */
+.val-with-delta {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: nowrap;
+}
+/* Инлайн-дельта прироста */
+.growth-delta {
+  font-size: 8px; font-weight: 700; white-space: nowrap;
+  padding: 1px 4px; border-radius: 3px;
+  display: inline-block; flex-shrink: 0;
+}
+.growth-delta.pos { color: #1a7a35; background: rgba(0,165,82,0.12); }
+.growth-delta.neg { color: #b91c1c; background: rgba(185,28,28,0.10); }
+.growth-delta.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="dash-root">
+
+  <!-- ШАПКА -->
+  <div class="header">
+    <h1>Заявочная кампания МФМ — 2026</h1>
+    <span class="date" id="todayDate"></span>
+  </div>
+  <div class="subheader">Срок проведения заявочной кампании с 04 февраля по 30 апреля 2026 года</div>
+  <div id="loadBar" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+    <select id="dateSelect" onchange="loadByDate(this.value)"
+      style="font-size:11px;padding:4px 8px;border-radius:5px;border:1px solid #ccc;
+             background:#fff;cursor:pointer;min-width:220px;display:none;">
+      <option value="">— выберите дату —</option>
+    </select>
+    <label style="font-size:11px;padding:4px 12px;border-radius:5px;border:1px solid #ccc;
+                  background:#f5f5f7;cursor:pointer;white-space:nowrap;font-weight:600;">
+      📂 Загрузить файл вручную
+      <input type="file" id="fileInput" accept=".xlsx" style="display:none;" />
+    </label>
+    <span id="loadStatus" style="font-size:10px;color:var(--muted);min-width:160px;"></span>
+  </div>
+
+  <!-- ═══ ВЕРХНЯЯ ПОЛОСА: hero + Россия рядом ═══ -->
+  <div class="top-row">
+
+    <!-- HERO CARD -->
+    <div class="card hero-card">
+
+    <!-- Левая: цифры + мини-динамика -->
+    <div class="hero-left">
+      <div class="hero-label">Все заявки</div>
+      <div class="val-with-delta"><div class="hero-value num" id="total">—</div><span class="growth-delta hidden" id="gd_total"></span></div>
+      <div class="hero-divider"></div>
+      <div class="hero-ages">
+        <div>
+          <span class="hero-age-label">14–17 лет</span>
+          <span class="val-with-delta"><span class="hero-age-val num" style="color:var(--blue)" id="total14">—</span><span class="growth-delta hidden" id="gd_total14"></span></span>
+        </div>
+        <div>
+          <span class="hero-age-label">18–35 лет</span>
+          <span class="val-with-delta"><span class="hero-age-val num" style="color:var(--green)" id="total35">—</span><span class="growth-delta hidden" id="gd_total35"></span></span>
+        </div>
+      </div>
+      <div class="dyn-divider"></div>
+      <div class="hero-dynamics">
+        <div class="dyn-row" style="margin-bottom:1px;">
+          <span class="dyn-label" style="visibility:hidden;">—</span>
+          <span></span>
+          <span style="font-size:8.5px;color:var(--muted);font-weight:700;text-align:right;">Разница</span>
+        </div>
+        <div class="dyn-row">
+          <span class="dyn-label" id="dyn_today_label">—</span>
+          <span class="dyn-val num" id="dyn_today">—</span>
+          <span class="dyn-delta neu" id="dyn_today_delta"></span>
+        </div>
+        <div class="dyn-row">
+          <span class="dyn-label" id="dyn_yesterday_label">—</span>
+          <span class="dyn-val num" id="dyn_yesterday">—</span>
+          <span class="dyn-delta neu" id="dyn_yesterday_delta"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Правая: сравнение недель + спарклайн -->
+    <div class="hero-right">
+      <div class="dow-wrap" id="dow_wrap" style="display:none;">
+        <div class="dow-title">Сравнение недель (пн–вс)</div>
+        <div class="dow-row" style="justify-content:space-between;">
+          <div>
+            <span class="dow-sub" id="dow_last_sub"></span>
+            <div class="dow-val num" id="dow_last_val">—</div>
+          </div>
+          <span class="dow-arrow">→</span>
+          <div>
+            <span class="dow-sub" id="dow_today_sub"></span>
+            <div class="dow-val num" id="dow_cur_val">—</div>
+          </div>
+          <span class="dyn-delta neu" id="dow_delta" style="margin-left:4px;"></span>
+        </div>
+      </div>
+      <div class="spark-wrap" id="spark_wrap" style="display:none;">
+        <div class="spark-label">Динамика за 14 дней</div>
+        <svg class="spark-svg" id="spark_svg" height="70" viewBox="0 0 300 70"></svg>
+        <div style="display:flex;justify-content:space-between;margin-top:2px;">
+          <span style="font-size:7px;color:black;" id="spark_date_from"></span>
+          <span style="font-size:7px;color:black;" id="spark_date_to"></span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /hero-card -->
+
+    <!-- РОССИЯ -->
+    <div class="zone-panel">
+      <div class="zone-label">🇷🇺 Российские участники и Иностранцы в РФ</div>
+      <div class="zone-inner">
+        <div class="card tbl-card" style="flex:0 0 296px;">
+          <div class="tbl-title">Федеральные округа</div>
+          <table id="foTable"><tbody></tbody></table>
+        </div>
+        <div class="card tbl-card" style="flex:1;">
+          <div class="tbl-title">↳ Топ 10 регионов</div>
+          <table id="topRegions" class="rank-table"><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /top-row -->
+
+  <!-- ═══ МИР + ДЕТАЛИЗАЦИЯ — вертикально ═══ -->
+  <div class="story-zone">
+
+    <!-- МИР -->
+    <div class="zone-panel">
+      <div class="zone-label">🌍 Иностранные участники и Соотечественники</div>
+      <div class="zone-inner">
+        <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;">
+          <div class="card tbl-card" style="flex:1;">
+            <div class="tbl-title">Макрорегионы</div>
+            <table id="macroTable"><tbody></tbody></table>
+          </div>
+          <div class="extra-cards">
+            <div class="card extra-card" style="flex:1;">
+              <div class="extra-title">Региональная программа</div>
+              <div class="extra-line"></div>
+              <div class="extra-sub">Всего</div>
+              <div class="val-with-delta"><div class="extra-value num" id="regionalTotal">—</div><span class="growth-delta hidden" id="gd_regionalTotal"></span></div>
+              <div class="extra-divider"></div>
+              <div class="extra-meta">Страны-участницы</div>
+              <div class="val-with-delta"><div class="extra-meta-val num" id="regionalCountries">—</div><span class="growth-delta hidden" id="gd_regionalCountries"></span></div>
+            </div>
+            <div class="card extra-card" style="flex:1;">
+              <div class="extra-title">Готов поехать за свой счёт</div>
+              <div class="extra-line"></div>
+              <div class="extra-sub">Всего</div>
+              <div class="val-with-delta"><div class="extra-value num" id="travelTotal">—</div><span class="growth-delta hidden" id="gd_travelTotal"></span></div>
+              <div class="extra-divider"></div>
+              <div class="extra-meta">Страны-участницы</div>
+              <div class="val-with-delta"><div class="extra-meta-val num" id="travelCountries">—</div><span class="growth-delta hidden" id="gd_travelCountries"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="card tbl-card" style="flex:0 0 460px;">
+          <div class="tbl-title">↳ Топ 10 стран</div>
+          <table id="topCountries" class="rank-table"><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- РАЗДЕЛИТЕЛЬ -->
+    <div class="section-divider">
+      <span class="section-divider-label">Детализация по конкурсным заданиям</span>
+    </div>
+
+    <!-- ДЕТАЛИЗАЦИЯ -->
+    <div class="detail-zone">
+
+      <div class="detail-row-title">ВСЕГО</div>
+      <div class="detail-row">
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--yellow);color:#000;">Полный профиль</div>
+          <div class="stat-category">Всего</div>
+          <div class="val-with-delta"><div class="stat-value num" id="dr_total">—</div><span class="growth-delta hidden" id="gd_dr_total"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="dr_total14">—</span><span class="growth-delta hidden" id="gd_dr_total14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="dr_total35">—</span><span class="growth-delta hidden" id="gd_dr_total35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--emerald);color:#fff;">Выполнено эссе</div>
+          <div class="stat-category">Всего</div>
+          <div class="val-with-delta"><div class="stat-value num" id="es_total">—</div><span class="growth-delta hidden" id="gd_es_total"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="es_total14">—</span><span class="growth-delta hidden" id="gd_es_total14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="es_total35">—</span><span class="growth-delta hidden" id="gd_es_total35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--blue);color:#fff;">Выполнено эссе и видео</div>
+          <div class="stat-category">Всего</div>
+          <div class="val-with-delta"><div class="stat-value num" id="vi_total">—</div><span class="growth-delta hidden" id="gd_vi_total"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="vi_total14">—</span><span class="growth-delta hidden" id="gd_vi_total14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="vi_total35">—</span><span class="growth-delta hidden" id="gd_vi_total35"></span></span></div>
+          </div>
+        </div>
+        <div class="card chart-card"><div id="pyr_total"></div></div>
+      </div>
+
+      <div class="detail-row-title">РОССИЙСКИЕ УЧАСТНИКИ</div>
+      <div class="detail-row">
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--yellow);color:#000;">Полный профиль</div>
+          <div class="stat-category">Российские участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="dr_russian">—</div><span class="growth-delta hidden" id="gd_dr_russian"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="dr_russian14">—</span><span class="growth-delta hidden" id="gd_dr_russian14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="dr_russian35">—</span><span class="growth-delta hidden" id="gd_dr_russian35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--emerald);color:#fff;">Выполнено эссе</div>
+          <div class="stat-category">Российские участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="es_russian">—</div><span class="growth-delta hidden" id="gd_es_russian"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="es_russian14">—</span><span class="growth-delta hidden" id="gd_es_russian14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="es_russian35">—</span><span class="growth-delta hidden" id="gd_es_russian35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--blue);color:#fff;">Выполнено эссе и видео</div>
+          <div class="stat-category">Российские участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="vi_russian">—</div><span class="growth-delta hidden" id="gd_vi_russian"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="vi_russian14">—</span><span class="growth-delta hidden" id="gd_vi_russian14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="vi_russian35">—</span><span class="growth-delta hidden" id="gd_vi_russian35"></span></span></div>
+          </div>
+        </div>
+        <div class="card chart-card"><div id="pyr_russian"></div></div>
+      </div>
+
+      <div class="detail-row-title">ИНОСТРАНЦЫ В РФ</div>
+      <div class="detail-row">
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--yellow);color:#000;">Полный профиль</div>
+          <div class="stat-category">Иностранцы в РФ</div>
+          <div class="val-with-delta"><div class="stat-value num" id="dr_foreignRF">—</div><span class="growth-delta hidden" id="gd_dr_foreignRF"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="dr_foreignRF14">—</span><span class="growth-delta hidden" id="gd_dr_foreignRF14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="dr_foreignRF35">—</span><span class="growth-delta hidden" id="gd_dr_foreignRF35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--emerald);color:#fff;">Выполнено эссе</div>
+          <div class="stat-category">Иностранцы в РФ</div>
+          <div class="val-with-delta"><div class="stat-value num" id="es_foreignRF">—</div><span class="growth-delta hidden" id="gd_es_foreignRF"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="es_foreignRF14">—</span><span class="growth-delta hidden" id="gd_es_foreignRF14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="es_foreignRF35">—</span><span class="growth-delta hidden" id="gd_es_foreignRF35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--blue);color:#fff;">Выполнено эссе и видео</div>
+          <div class="stat-category">Иностранцы в РФ</div>
+          <div class="val-with-delta"><div class="stat-value num" id="vi_foreignRF">—</div><span class="growth-delta hidden" id="gd_vi_foreignRF"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="vi_foreignRF14">—</span><span class="growth-delta hidden" id="gd_vi_foreignRF14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="vi_foreignRF35">—</span><span class="growth-delta hidden" id="gd_vi_foreignRF35"></span></span></div>
+          </div>
+        </div>
+        <div class="card chart-card"><div id="pyr_foreignRF"></div></div>
+      </div>
+
+      <div class="detail-row-title">ИНОСТРАННЫЕ УЧАСТНИКИ</div>
+      <div class="detail-row">
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--yellow);color:#000;">Полный профиль</div>
+          <div class="stat-category">Иностранные участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="dr_foreign">—</div><span class="growth-delta hidden" id="gd_dr_foreign"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="dr_foreign14">—</span><span class="growth-delta hidden" id="gd_dr_foreign14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="dr_foreign35">—</span><span class="growth-delta hidden" id="gd_dr_foreign35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--emerald);color:#fff;">Выполнено эссе</div>
+          <div class="stat-category">Иностранные участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="es_foreign">—</div><span class="growth-delta hidden" id="gd_es_foreign"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="es_foreign14">—</span><span class="growth-delta hidden" id="gd_es_foreign14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="es_foreign35">—</span><span class="growth-delta hidden" id="gd_es_foreign35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--blue);color:#fff;">Выполнено эссе и видео</div>
+          <div class="stat-category">Иностранные участники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="vi_foreign">—</div><span class="growth-delta hidden" id="gd_vi_foreign"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="vi_foreign14">—</span><span class="growth-delta hidden" id="gd_vi_foreign14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="vi_foreign35">—</span><span class="growth-delta hidden" id="gd_vi_foreign35"></span></span></div>
+          </div>
+        </div>
+        <div class="card chart-card"><div id="pyr_foreign"></div></div>
+      </div>
+
+      <div class="detail-row-title">СООТЕЧЕСТВЕННИКИ</div>
+      <div class="detail-row">
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--yellow);color:#000;">Полный профиль</div>
+          <div class="stat-category">Соотечественники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="dr_compatriot">—</div><span class="growth-delta hidden" id="gd_dr_compatriot"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="dr_compatriot14">—</span><span class="growth-delta hidden" id="gd_dr_compatriot14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="dr_compatriot35">—</span><span class="growth-delta hidden" id="gd_dr_compatriot35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--emerald);color:#fff;">Выполнено эссе</div>
+          <div class="stat-category">Соотечественники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="es_compatriot">—</div><span class="growth-delta hidden" id="gd_es_compatriot"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="es_compatriot14">—</span><span class="growth-delta hidden" id="gd_es_compatriot14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="es_compatriot35">—</span><span class="growth-delta hidden" id="gd_es_compatriot35"></span></span></div>
+          </div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-tag" style="background:var(--blue);color:#fff;">Выполнено эссе и видео</div>
+          <div class="stat-category">Соотечественники</div>
+          <div class="val-with-delta"><div class="stat-value num" id="vi_compatriot">—</div><span class="growth-delta hidden" id="gd_vi_compatriot"></span></div>
+          <div class="stat-divider"></div>
+          <div class="stat-ages">
+            <div><span class="stat-age-label">14–17</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--blue)" id="vi_compatriot14">—</span><span class="growth-delta hidden" id="gd_vi_compatriot14"></span></span></div>
+            <div><span class="stat-age-label">18–35</span><span class="val-with-delta"><span class="stat-age-val num" style="color:var(--green)" id="vi_compatriot35">—</span><span class="growth-delta hidden" id="gd_vi_compatriot35"></span></span></div>
+          </div>
+        </div>
+        <div class="card chart-card"><div id="pyr_compatriot"></div></div>
+      </div>
+
+    </div><!-- /detail-zone -->
+
+  </div><!-- /story-zone -->
+</div><!-- /dash-root -->
+
+<script>
+Chart.register(ChartDataLabels);
+
+function fmt(n) {
+  if (n === undefined || n === null) return '0';
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+}
+function parseBool(v) {
+  if (v === true) return true;
+  if (v === false) return false;
+  return String(v).trim().toLowerCase() === 'true';
+}
+function setText(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = fmt(v);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const d = new Date();
+  document.getElementById('todayDate').textContent =
+    [d.getDate(), d.getMonth()+1, d.getFullYear()].map(x => String(x).padStart(2,'0')).join('.');
+});
+
+// ══════════════════════════════════════════
+// НАСТРОЙКИ РЕПОЗИТОРИЯ — замените на свои
+const GH_USER   = 'DaniilLosky';   // ваш логин GitHub
+const GH_REPO   = 'mfm-dashboard';   // название репозитория
+const GH_BRANCH = 'main';              // ветка
+const GH_FOLDER = 'data';              // папка с xlsx-файлами
+// ══════════════════════════════════════════
+
+function setStatus(msg, color) {
+  const el = document.getElementById('loadStatus');
+  if (el) { el.textContent = msg; el.style.color = color || 'var(--muted)'; }
+}
+
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+function parseXlsx(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  return XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+}
+
+function dateFromName(name) {
+  const m = name.match(/(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+}
+
+// Получаем список xlsx-файлов из папки через GitHub API
+async function ghListFiles() {
+  const url = `https://api.github.com/repos/${GH_USER}/${GH_REPO}/contents/${GH_FOLDER}?ref=${GH_BRANCH}`;
+  const resp = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+  if (!resp.ok) throw new Error('GitHub API: ' + resp.status);
+  const items = await resp.json();
+  return items
+    .filter(f => f.name.endsWith('.xlsx'))
+    .map(f => ({ name: f.name, path: f.path }));
+}
+
+// Скачиваем файл через raw.githubusercontent.com — CORS открыт, без прокси
+async function ghFetchFile(path) {
+  const url = `https://raw.githubusercontent.com/${GH_USER}/${GH_REPO}/${GH_BRANCH}/${path}`;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.arrayBuffer();
+}
+
+// Инициализация: получаем список, строим select, грузим сегодняшний
+async function initDashboard() {
+  setStatus('Получаю список файлов…', 'var(--muted)');
+  try {
+    const files = await ghListFiles();
+    if (!files.length) {
+      setStatus('Файлов в папке data/ не найдено', '#b91c1c');
+      return;
+    }
+
+    // Сортируем по убыванию даты
+    files.sort((a, b) => {
+      const da = dateFromName(a.name) || a.name;
+      const db = dateFromName(b.name) || b.name;
+      return db.localeCompare(da);
+    });
+
+    // Строим select
+    const sel = document.getElementById('dateSelect');
+    sel.style.display = '';
+    sel.innerHTML = '<option value="">— выберите дату —</option>';
+    files.forEach(f => {
+      const date = dateFromName(f.name);
+      const opt = document.createElement('option');
+      opt.value = f.path;
+      opt.textContent = date
+        ? date.split('-').reverse().join('.') + ' (' + f.name.replace('.xlsx','') + ')'
+        : f.name;
+      sel.appendChild(opt);
+    });
+
+    // Ищем сегодняшний файл
+    const today = todayKey();
+    const todayFile = files.find(f => dateFromName(f.name) === today);
+    const target = todayFile || files[0];
+
+    sel.value = target.path;
+    if (!todayFile) {
+      const d = dateFromName(target.name);
+      setStatus('Файла за сегодня нет, загружаю последний: ' + (d || target.name), '#e07000');
+    } else {
+      setStatus('Загружаю данные за сегодня…', 'var(--muted)');
+    }
+    await loadByDate(target.path);
+
+  } catch(err) {
+    setStatus('Ошибка: ' + err.message, '#b91c1c');
+    console.error(err);
+  }
+}
+
+// Загрузка конкретного файла по пути в репозитории
+async function loadByDate(path) {
+  if (!path) return;
+  setStatus('Загружаю…', 'var(--muted)');
+  try {
+    const buffer = await ghFetchFile(path);
+    processData(parseXlsx(buffer));
+    const sel = document.getElementById('dateSelect');
+    const label = sel.options[sel.selectedIndex]?.text || path;
+    setStatus('✓ ' + label, '#1a7a35');
+  } catch(err) {
+    setStatus('Ошибка загрузки: ' + err.message, '#b91c1c');
+    console.error(err);
+  }
+}
+
+// Загрузка файла вручную (резервный вариант)
+document.getElementById('fileInput').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  setStatus('Читаю файл…', 'var(--muted)');
+  const reader = new FileReader();
+  reader.onload = evt => {
+    try {
+      processData(parseXlsx(evt.target.result));
+      setStatus('✓ ' + file.name, '#1a7a35');
+    } catch(err) {
+      setStatus('Ошибка чтения файла', '#b91c1c');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+// Автозапуск
+document.addEventListener('DOMContentLoaded', () => initDashboard());
+/* ── Обработка данных ── */
+function processData(rawData) {
+  const mk = () => ({ d:0,d14:0,d35:0,r:0,r14:0,r35:0,essay:0,essay14:0,essay35:0,video:0,video14:0,video35:0,p:0 });
+  const cats = { russian:mk(), foreignRF:mk(), foreign:mk(), compatriot:mk() };
+  let totalAll=0, total14=0, total35=0;
+  const fo={}, macro={}, regs={}, countries={};
+  const regional={total:0,set:new Set()}, travel={total:0,set:new Set()};
+
+  rawData.forEach(row => {
+    totalAll++;
+    const isChild = parseBool(row['is_child']);
+    const isRfCit = parseBool(row['is_rf_citizenship']);
+    const isRfRes = parseBool(row['is_rf_residence']);
+    const ageCat  = String(row['Категория участника']||'').trim();
+    const is14    = ageCat==='14-17' || isChild;
+    if (is14) total14++; else total35++;
+
+    let cat;
+    if (isRfCit && isRfRes)        cat = 'russian';
+    else if (isRfCit && !isRfRes)  cat = 'compatriot';
+    else if (!isRfCit && isRfRes)  cat = 'foreignRF';
+    else                            cat = 'foreign';
+
+    const status = String(row['Статус заявки']||'').trim();
+    if (status === 'Черновик') {
+      cats[cat].d++; if (is14) cats[cat].d14++; else cats[cat].d35++;
+    } else if (status === 'На рассмотрении') {
+      cats[cat].r++;
+      const essay = String(row['Статус эссе']||'').trim();
+      const video = String(row['Статус видеовизитки']||'').trim();
+      const essayDone = essay !== '';
+      const videoDone = video !== '';
+      if (is14) {
+        cats[cat].r14++;
+        if (essayDone) { cats[cat].essay++; cats[cat].essay14++; }
+        if (videoDone) { cats[cat].video++; cats[cat].video14++; }
+      } else {
+        cats[cat].r35++;
+        if (essayDone) { cats[cat].essay++; cats[cat].essay35++; }
+        if (videoDone) { cats[cat].video++; cats[cat].video35++; }
+      }
+    }
+    // Полный профиль (независимо от статуса)
+    const profileFull = parseBool(row['Профиль заполнен полностью']);
+    if (profileFull) cats[cat].p++;
+
+    const foV  = String(row['Федеральный округ']||'').trim();
+    const macV = String(row['Макрорегион']||'').trim();
+    const regV = String(row['Регион проживания']||'').trim();
+    const cntV = String(row['Страна проживания']||'').trim();
+    if (foV  && foV  !== 'Нет ФО')    fo[foV]    = (fo[foV]   ||0)+1;
+    if (macV && macV !== 'Нет макро') macro[macV] = (macro[macV]||0)+1;
+    if (regV && isRfRes)               regs[regV]  = (regs[regV] ||0)+1;
+    if (cntV && cntV !== 'Россия')     countries[cntV] = (countries[cntV]||0)+1;
+
+    if (cntV && cntV !== 'Россия') {
+      const rp = String(row['Участие в РП (да/нет) #expeditionprogram']||'').trim();
+      if (rp === 'Да') { regional.total++; regional.set.add(cntV); }
+      const te = String(row['Готов добраться за свой счёт #travelownexpense']||'').trim();
+      if (te === 'Да') { travel.total++;  travel.set.add(cntV); }
+    }
+  });
+
+  const total = mk();
+  ['russian','foreignRF','foreign','compatriot'].forEach(k => {
+    Object.keys(total).forEach(f => { total[f] += cats[k][f]; });
+  });
+
+  const dyn = calcDynamics(rawData);
+  const dayGrowth = calcDayGrowth(rawData);
+  updateUI({ totalAll, total14, total35, cats, total, fo, macro, regs, countries, regional, travel, dyn, dayGrowth });
+}
+
+/* ── Прирост за день: сегодня vs вчера ── */
+function calcDayGrowth(rawData) {
+  function parseDate(v) {
+    if (!v) return null;
+    const s = String(v).trim();
+    const m1 = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    if (typeof v === 'number' && v > 40000) return new Date((v - 25569) * 86400 * 1000);
+    return null;
+  }
+  function dayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  // Максимальная дата в файле = "сегодня"
+  let maxDate = null;
+  rawData.forEach(row => {
+    const d = parseDate(row['Дата создания заявки']);
+    if (d && (!maxDate || d > maxDate)) maxDate = d;
+  });
+  if (!maxDate) return null;
+
+  const todayKey = dayKey(maxDate);
+  const yest = new Date(maxDate); yest.setDate(yest.getDate() - 1);
+  const yesterdayKey = dayKey(yest);
+
+  const mkC = () => ({
+    total:0, total14:0, total35:0,
+    dr:0, dr14:0, dr35:0,
+    essay:0, essay14:0, essay35:0,
+    video:0, video14:0, video35:0,
+    p:0,
+    regionalTotal:0, regionalCountries: new Set(),
+    travelTotal:0,   travelCountries:   new Set(),
+  });
+
+  const slots = ['total','russian','foreignRF','foreign','compatriot'];
+
+  // "Вчера" = накопленный итог всех заявок с датой <= вчера
+  // "Сегодня" = накопленный итог всех заявок с датой <= сегодня (т.е. весь файл)
+  // Дельта = сегодня - вчера = заявки созданные именно сегодня
+  // НО считаем накопленным образом через два среза:
+  //   yestSnap — строки у которых дата <= вчера
+  //   todaySnap — все строки (дата <= сегодня, т.е. весь файл)
+
+  const yestSnap = {}; const todaySnap = {};
+  slots.forEach(k => { yestSnap[k] = mkC(); todaySnap[k] = mkC(); });
+
+  rawData.forEach(row => {
+    const d = parseDate(row['Дата создания заявки']);
+    // Строки без даты включаем в оба среза (не знаем когда — считаем как "до сегодня")
+    const dk = d ? dayKey(d) : null;
+
+    const isChild   = parseBool(row['is_child']);
+    const isRfCit   = parseBool(row['is_rf_citizenship']);
+    const isRfRes   = parseBool(row['is_rf_residence']);
+    const ageCat    = String(row['Категория участника']||'').trim();
+    const is14      = ageCat === '14-17' || isChild;
+    const status    = String(row['Статус заявки']||'').trim();
+    const essay     = String(row['Статус эссе']||'').trim();
+    const video     = String(row['Статус видеовизитки']||'').trim();
+    const profileFull = parseBool(row['Профиль заполнен полностью']);
+    const cntV      = String(row['Страна проживания']||'').trim();
+    const rp        = String(row['Участие в РП (да/нет) #expeditionprogram']||'').trim();
+    const te        = String(row['Готов добраться за свой счёт #travelownexpense']||'').trim();
+
+    let cat;
+    if (isRfCit && isRfRes)       cat = 'russian';
+    else if (isRfCit && !isRfRes) cat = 'compatriot';
+    else if (!isRfCit && isRfRes) cat = 'foreignRF';
+    else                           cat = 'foreign';
+
+    function fillCnt(cnt) {
+      cnt.total++;
+      if (is14) cnt.total14++; else cnt.total35++;
+      if (status === 'Черновик') {
+        cnt.dr++; if (is14) cnt.dr14++; else cnt.dr35++;
+      } else if (status === 'На рассмотрении') {
+        if (essay !== '') { cnt.essay++; if (is14) cnt.essay14++; else cnt.essay35++; }
+        if (video !== '') { cnt.video++; if (is14) cnt.video14++; else cnt.video35++; }
+      }
+      if (profileFull) cnt.p++;
+      if (cntV && cntV !== 'Россия') {
+        if (rp === 'Да') { cnt.regionalTotal++; cnt.regionalCountries.add(cntV); }
+        if (te === 'Да') { cnt.travelTotal++;   cnt.travelCountries.add(cntV); }
+      }
+    }
+
+    // Всегда попадает в todaySnap (все строки = накопленный итог на сегодня)
+    for (const key of ['total', cat]) fillCnt(todaySnap[key]);
+
+    // В yestSnap попадает только если дата <= вчера (или дата неизвестна)
+    if (!dk || dk <= yesterdayKey) {
+      for (const key of ['total', cat]) fillCnt(yestSnap[key]);
+    }
+  });
+
+  // Дельта = todaySnap - yestSnap
+  const d = (a, b) => a - b;
+  const result = { todayKey, yesterdayKey };
+
+  slots.forEach(k => {
+    const t = todaySnap[k], y = yestSnap[k];
+    const sfx = k;
+    result[`total_${sfx}`]   = d(t.total,    y.total);
+    result[`total_${sfx}14`] = d(t.total14,  y.total14);
+    result[`total_${sfx}35`] = d(t.total35,  y.total35);
+    result[`dr_${sfx}`]      = d(t.p,        y.p);
+    result[`dr_${sfx}14`]    = d(t.dr14,     y.dr14);
+    result[`dr_${sfx}35`]    = d(t.dr35,     y.dr35);
+    result[`es_${sfx}`]      = d(t.essay,    y.essay);
+    result[`es_${sfx}14`]    = d(t.essay14,  y.essay14);
+    result[`es_${sfx}35`]    = d(t.essay35,  y.essay35);
+    result[`vi_${sfx}`]      = d(t.video,    y.video);
+    result[`vi_${sfx}14`]    = d(t.video14,  y.video14);
+    result[`vi_${sfx}35`]    = d(t.video35,  y.video35);
+  });
+
+  result.regionalTotal     = d(todaySnap.total.regionalTotal,          yestSnap.total.regionalTotal);
+  result.regionalCountries = d(todaySnap.total.regionalCountries.size, yestSnap.total.regionalCountries.size);
+  result.travelTotal       = d(todaySnap.total.travelTotal,            yestSnap.total.travelTotal);
+  result.travelCountries   = d(todaySnap.total.travelCountries.size,   yestSnap.total.travelCountries.size);
+
+  // Алиасы для hero и total-строки
+  result.total   = result.total_total;
+  result.total14 = result.total_total14;
+  result.total35 = result.total_total35;
+  result.dr_total_p = result.dr_total;
+
+  return result;
+}
+
+/* ── Динамика ── */
+function calcDynamics(rawData) {
+  function parseDate(v) {
+    if (!v) return null;
+    const s = String(v).trim();
+    const m1 = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+    if (m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    if (typeof v === 'number' && v > 40000) return new Date((v - 25569) * 86400 * 1000);
+    return null;
+  }
+  function dayKey(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  const byDay = {};
+  let maxDate = null;
+  rawData.forEach(row => {
+    const d = parseDate(row['Дата создания заявки']);
+    if (!d) return;
+    const k = dayKey(d);
+    byDay[k] = (byDay[k]||0) + 1;
+    if (!maxDate || d > maxDate) maxDate = d;
+  });
+  if (!maxDate || Object.keys(byDay).length === 0) return null;
+
+  const todayDate = new Date(maxDate);
+  const yestDate  = new Date(todayDate); yestDate.setDate(yestDate.getDate()-1);
+  const day2Date  = new Date(todayDate); day2Date.setDate(day2Date.getDate()-2);
+
+  const todayCount = byDay[dayKey(todayDate)] || 0;
+  const yestCount  = byDay[dayKey(yestDate)]  || 0;
+  const day2Count  = byDay[dayKey(day2Date)]  || 0;
+
+  // Скользящие 7 дней (для строки "За 7 дней" — оставляем для совместимости)
+  let weekCount = 0, prevWeekCount = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(todayDate); d.setDate(d.getDate()-i);
+    weekCount += byDay[dayKey(d)] || 0;
+  }
+  for (let i = 7; i < 14; i++) {
+    const d = new Date(todayDate); d.setDate(d.getDate()-i);
+    prevWeekCount += byDay[dayKey(d)] || 0;
+  }
+
+  const sparkDays = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(todayDate); d.setDate(d.getDate()-i);
+    sparkDays.push({ date: d, count: byDay[dayKey(d)] || 0 });
+  }
+
+  // Сравнение двух полных недель пн–вс: прошлой и позапрошлой
+  const dow = todayDate.getDay(); // 0=вс, 1=пн, ..., 6=сб
+  const daysFromMon = (dow === 0) ? 6 : dow - 1; // дней от пн текущей недели
+
+  // Прошлая полная неделя: пн … вс
+  const prevMonDate  = new Date(todayDate); prevMonDate.setDate(todayDate.getDate() - daysFromMon - 7);
+  const prevSunDate  = new Date(prevMonDate); prevSunDate.setDate(prevMonDate.getDate() + 6);
+
+  // Позапрошлая полная неделя: пн … вс
+  const prev2MonDate = new Date(prevMonDate); prev2MonDate.setDate(prevMonDate.getDate() - 7);
+  const prev2SunDate = new Date(prev2MonDate); prev2SunDate.setDate(prev2MonDate.getDate() + 6);
+
+  // Считаем суммы (имена с префиксом cmp_ чтобы не конфликтовать с prevWeekCount выше)
+  let cmpLastWeek = 0, cmpPrev2Week = 0;
+  for (let i = 0; i < 7; i++) {
+    const d1 = new Date(prevMonDate);  d1.setDate(prevMonDate.getDate() + i);
+    const d2 = new Date(prev2MonDate); d2.setDate(prev2MonDate.getDate() + i);
+    cmpLastWeek  += byDay[dayKey(d1)] || 0;
+    cmpPrev2Week += byDay[dayKey(d2)] || 0;
+  }
+
+  const f2short = d => `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}`;
+
+  return {
+    fileDateObj:   todayDate,
+    today:         todayCount,  todayDelta:  todayCount - yestCount,
+    yesterday:     yestCount,   yestDelta:   yestCount  - day2Count,
+    week:          weekCount,   weekDelta:   weekCount  - prevWeekCount,
+    // Сравнение прошлой и позапрошлой полных недель пн–вс
+    curWeekCount:          cmpLastWeek,
+    prevWeekSameDayCount:  cmpPrev2Week,
+    weekCompDelta:         cmpLastWeek - cmpPrev2Week,
+    curWeekLabel:          f2short(prevMonDate)  + '–' + f2short(prevSunDate),
+    prevWeekLabel:         f2short(prev2MonDate) + '–' + f2short(prev2SunDate),
+    sparkDays,
+  };
+}
+
+/* ── UI ── */
+function renderDelta(elId, delta) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if      (delta === 0) { el.textContent = '±0';          el.className = 'dyn-delta neu'; }
+  else if (delta > 0)   { el.textContent = '+' + fmt(delta); el.className = 'dyn-delta pos'; }
+  else                  { el.textContent = fmt(delta);     el.className = 'dyn-delta neg'; }
+}
+
+function renderSparkline(sparkDays, todayDelta) {
+  const wrap = document.getElementById('spark_wrap');
+  const svg  = document.getElementById('spark_svg');
+  if (!wrap || !svg || !sparkDays?.length) return;
+  wrap.style.display = 'block';
+
+  const W = 300, H = 70, PAD = 3;
+  const counts = sparkDays.map(d => d.count);
+  const maxV = Math.max(...counts, 1);
+  const n = counts.length;
+
+  const pts = counts.map((v, i) => [
+    PAD + (i / (n-1)) * (W - PAD*2),
+    H - PAD - (v / maxV) * (H - PAD*2 - 6)
+  ]);
+
+  // Подписи по оси X (каждые 2 дня)
+  let ticksHtml = '';
+  sparkDays.forEach((day, i) => {
+    if (i % 2 === 0) {
+      const x = PAD + (i / (n-1)) * (W - PAD*2);
+      const label = `${day.date.getDate()}.${String(day.date.getMonth()+1).padStart(2,'0')}`;
+      ticksHtml += `<text x="${x.toFixed(1)}" y="${H-1}" font-size="5" text-anchor="middle" fill="#ccc">${label}</text>`;
+    }
+  });
+
+  const path = pts.map((p,i) => `${i===0?'M':'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+  const area = path + ` L${pts[n-1][0].toFixed(1)},${H-8} L${pts[0][0].toFixed(1)},${H-8} Z`;
+  const last = pts[n-1];
+  const dotColor = todayDelta >= 0 ? '#339130' : '#b91c1c';
+
+  // Градиент через clipPath + rgba-полосы — работает корректно при печати в PDF
+  const gradientStrips = (() => {
+    const steps = 8;
+    let strips = '';
+    for (let s = 0; s < steps; s++) {
+      const y1 = H - 8 - ((H - 8 - 6) * (steps - s) / steps);
+      const y2 = H - 8 - ((H - 8 - 6) * (steps - s - 1) / steps);
+      const opacity = (0.15 * (steps - s) / steps).toFixed(3);
+      strips += `<rect x="${PAD}" y="${y1.toFixed(1)}" width="${(W-PAD*2).toFixed(1)}" height="${(y2-y1).toFixed(1)}" fill="rgba(37,33,103,${opacity})" clip-path="url(#spark-clip)"/>`;
+    }
+    return strips;
+  })();
+
+  svg.innerHTML = `
+    <defs>
+      <clipPath id="spark-clip">
+        <path d="${area}"/>
+      </clipPath>
+    </defs>
+    <rect x="${PAD}" y="0" width="${W-PAD*2}" height="${H-8}" fill="rgba(37,33,103,0.07)" clip-path="url(#spark-clip)"/>
+    ${gradientStrips}
+    <path d="${path}" fill="none" stroke="#252167" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.5" fill="${dotColor}" stroke="#fff" stroke-width="1"/>
+    ${ticksHtml}
+  `;
+
+  const f2 = d => `${d.getDate()}.${String(d.getMonth()+1).padStart(2,'0')}`;
+  const elF = document.getElementById('spark_date_from');
+  const elT = document.getElementById('spark_date_to');
+  if (elF) elF.textContent = f2(sparkDays[0].date);
+  if (elT) elT.textContent = f2(sparkDays[sparkDays.length-1].date);
+}
+
+function renderDowBlock(dyn) {
+  const wrap = document.getElementById('dow_wrap');
+  if (!wrap) return;
+  wrap.style.display = 'block';
+
+  // Прошлая неделя: пн–вс (полный диапазон)
+  const elLS = document.getElementById('dow_last_sub');
+  const elTS = document.getElementById('dow_today_sub');
+  const elLV = document.getElementById('dow_last_val');
+  const elCV = document.getElementById('dow_cur_val');
+
+  if (elLS) elLS.textContent = dyn.prevWeekLabel;          // "10.02–16.02"
+  if (elTS) elTS.textContent = dyn.curWeekLabel;           // "17.02–23.02"
+  if (elLV) elLV.textContent = fmt(dyn.prevWeekSameDayCount);
+  if (elCV) elCV.textContent = fmt(dyn.curWeekCount);
+  renderDelta('dow_delta', dyn.weekCompDelta);
+}
+
+
+// ── Прирост: сравнение с предыдущей загрузкой ──
+const SNAP_KEY = 'mfm_snapshot';
+
+function saveSnapshot(data) {
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify(data)); } catch(e) {}
+}
+
+function loadSnapshot() {
+  try { const r = localStorage.getItem(SNAP_KEY); return r ? JSON.parse(r) : null; }
+  catch(e) { return null; }
+}
+
+function renderGrowth(elId, delta) {
+  const el = document.getElementById('gd_' + elId);
+  if (!el) return;
+  if (delta === null || delta === undefined) { el.className = 'growth-delta hidden'; return; }
+  if (delta === 0) {
+    el.className = 'growth-delta hidden'; return;
+  } else if (delta > 0) {
+    el.textContent = '+' + fmt(delta); el.className = 'growth-delta pos';
+  } else {
+    el.textContent = fmt(delta); el.className = 'growth-delta neg';
+  }
+}
+
+function updateUI(s) {
+  // Прирост: сегодня vs вчера из calcDayGrowth
+  const g = s.dayGrowth;
+
+  setText('total',   s.totalAll);
+  setText('total14', s.total14);
+  setText('total35', s.total35);
+
+  // Прирост hero
+  renderGrowth('total',   g?.total);
+  renderGrowth('total14', g?.total14);
+  renderGrowth('total35', g?.total35);
+
+  if (s.dyn) {
+    // Заполняем метки дат вместо "Сегодня"/"Вчера"
+    const fmtDate = d => String(d.getDate()).padStart(2,'0') + '.' + String(d.getMonth()+1).padStart(2,'0');
+    const todayD = s.dyn.fileDateObj;
+    const yesterdayD = new Date(todayD); yesterdayD.setDate(yesterdayD.getDate()-1);
+    const elTL = document.getElementById('dyn_today_label');
+    const elYL = document.getElementById('dyn_yesterday_label');
+    if (elTL) elTL.textContent = fmtDate(todayD);
+    if (elYL) elYL.textContent = fmtDate(yesterdayD);
+
+    setText('dyn_today',     s.dyn.today);
+    setText('dyn_yesterday', s.dyn.yesterday);
+    renderDelta('dyn_today_delta',     s.dyn.todayDelta);
+    renderDelta('dyn_yesterday_delta', s.dyn.yestDelta);
+    renderSparkline(s.dyn.sparkDays, s.dyn.todayDelta);
+    renderDowBlock(s.dyn);
+  }
+
+  [['russian','russian'],['foreignRF','foreignRF'],['foreign','foreign'],['compatriot','compatriot']]
+  .forEach(([id,key]) => {
+    const c = s.cats[key];
+    // Полный профиль
+    setText(`dr_${id}`, c.p); setText(`dr_${id}14`, c.d14); setText(`dr_${id}35`, c.d35);
+    // Выполнено эссе
+    setText(`es_${id}`, c.essay); setText(`es_${id}14`, c.essay14); setText(`es_${id}35`, c.essay35);
+    // Выполнена видеовизитка
+    setText(`vi_${id}`, c.video); setText(`vi_${id}14`, c.video14); setText(`vi_${id}35`, c.video35);
+  });
+  // Итог ВСЕГО
+  setText('dr_total',  s.total.p);     setText('dr_total14', s.total.d14); setText('dr_total35', s.total.d35);
+  setText('es_total',  s.total.essay); setText('es_total14', s.total.essay14); setText('es_total35', s.total.essay35);
+  setText('vi_total',  s.total.video); setText('vi_total14', s.total.video14); setText('vi_total35', s.total.video35);
+  setText('regionalTotal',     s.regional.total);
+  setText('regionalCountries', s.regional.set.size);
+  setText('travelTotal',       s.travel.total);
+  setText('travelCountries',   s.travel.set.size);
+
+  // Прирост regional и travel
+  renderGrowth('regionalTotal',     g?.regionalTotal);
+  renderGrowth('regionalCountries', g?.regionalCountries);
+  renderGrowth('travelTotal',       g?.travelTotal);
+  renderGrowth('travelCountries',   g?.travelCountries);
+
+  // Прирост stat-карточек по всем группам
+  const _grps = ['total','russian','foreignRF','foreign','compatriot'];
+  _grps.forEach(k => {
+    const sfx = k === 'total' ? 'total' : k;
+    renderGrowth(`dr_${k}`,    g?.[`dr_${sfx}`]);
+    renderGrowth(`dr_${k}14`,  g?.[`dr_${sfx}14`]);
+    renderGrowth(`dr_${k}35`,  g?.[`dr_${sfx}35`]);
+    renderGrowth(`es_${k}`,    g?.[`es_${sfx}`]);
+    renderGrowth(`es_${k}14`,  g?.[`es_${sfx}14`]);
+    renderGrowth(`es_${k}35`,  g?.[`es_${sfx}35`]);
+    renderGrowth(`vi_${k}`,    g?.[`vi_${sfx}`]);
+    renderGrowth(`vi_${k}14`,  g?.[`vi_${sfx}14`]);
+    renderGrowth(`vi_${k}35`,  g?.[`vi_${sfx}35`]);
+  });
+
+  renderTable('foTable',      s.fo,        null, true,  'bars');
+  renderTable('macroTable',   s.macro,     null, true,  'bars');
+  renderTable('topRegions',   s.regs,      10,   false, 'bars');
+  renderTable('topCountries', s.countries, 10,   false, 'bars');
+
+  renderPyramid('pyr_total',      'ВСЕГО',                 s.total);
+  renderPyramid('pyr_russian',    'РОССИЙСКИЕ УЧАСТНИКИ',  s.cats.russian);
+  renderPyramid('pyr_foreignRF',  'ИНОСТРАНЦЫ В РФ',       s.cats.foreignRF);
+  renderPyramid('pyr_foreign',    'ИНОСТРАННЫЕ УЧАСТНИКИ', s.cats.foreign);
+  renderPyramid('pyr_compatriot', 'СООТЕЧЕСТВЕННИКИ',      s.cats.compatriot);
+}
+
+function renderTable(id, data, limit, showTotal, mode) {
+  const tbody = document.querySelector(`#${id} tbody`);
+  if (!tbody) return;
+  const entries  = Object.entries(data).sort((a,b) => b[1]-a[1]);
+  const allTotal = entries.reduce((s,[,v]) => s+v, 0);
+  const denom    = allTotal || 1;
+  const rows     = limit ? entries.slice(0, limit) : entries;
+  const isRank   = mode === 'rank';
+  let html = '';
+
+  if (showTotal && allTotal > 0 && !isRank) {
+    html += `<tr class="total-row">
+      <td>Всего</td>
+      <td><div class="bar-cell">
+        <span class="bar-num num">${fmt(allTotal)}</span>
+        <div class="bar-track"><div class="bar-fill" style="width:100%"></div></div>
+      </div></td>
+    </tr>`;
+  }
+
+  rows.forEach(([name, val], i) => {
+    const pct = (val / denom * 100).toFixed(1);
+    if (isRank) {
+      html += `<tr>
+        <td style="width:20px;padding-right:3px;text-align:center;"><span class="rank-num">${i+1}</span></td>
+        <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${name}</td>
+        <td style="text-align:right;font-weight:700;white-space:nowrap;">${fmt(val)}</td>
+      </tr>`;
+    } else {
+      html += `<tr>
+        <td>${name}</td>
+        <td><div class="bar-cell">
+          <span class="bar-num num">${fmt(val)}</span>
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        </div></td>
+      </tr>`;
+    }
+  });
+  tbody.innerHTML = html;
+}
+
+function renderPyramid(containerId, title, data) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  // Полный профиль — базовый уровень (100%)
+  const pAll = data.p || 0;
+  const eAll = (data.essay14||0) + (data.essay35||0);
+  const vAll = (data.video14||0) + (data.video35||0);
+
+  const ep = pAll > 0 ? Math.round(eAll / pAll * 100) : 0;
+  const vp = pAll > 0 ? Math.round(vAll / pAll * 100) : 0;
+
+  // Воронка — каждый бар центрирован, ширина = % от 100%
+  const C = ['rgba(37,33,103,0.35)', 'rgba(37,33,103,0.65)', 'rgba(37,33,103,0.95)'];
+
+  const bar = (lbl, wpct, color, labelTxt) =>
+    `<div class="pyr-row" style="margin-bottom:5px;align-items:center;">
+       <div class="pyr-row-label">${lbl}</div>
+       <div style="flex:1;display:flex;align-items:center;justify-content:center;min-width:0;">
+         <div style="width:${wpct};background:${color};height:22px;border-radius:5px;
+                     display:flex;align-items:center;justify-content:center;
+                     min-width:30px;">
+           <span class="pyr-label">${labelTxt}</span>
+         </div>
+       </div>
+     </div>`;
+
+    el.innerHTML =
+    bar('Заявка', '100%',  C[0], fmt(pAll) + ' · 100%') +
+    bar('Эссе',   ep + '%', C[1], fmt(eAll) + ' · ' + ep + '%') +
+    bar('Эссе и видео',  vp + '%', C[2], fmt(vAll) + ' · ' + vp + '%');
+}
+</script>
+</body>
+</html>
