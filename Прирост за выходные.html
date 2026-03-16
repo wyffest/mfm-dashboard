@@ -329,7 +329,6 @@ td:last-child { width: 55%; }
   body { overflow: visible !important; }
 
   #fileInput, input[type="file"] { display: none !important; }
-  #loadBar { display: none !important; }
 
   .dash-root {
     width: 1040px !important;
@@ -569,7 +568,7 @@ td:last-child { width: 55%; }
       <div class="zone-label">🇷🇺 Российские участники и Иностранцы в РФ</div>
       <div class="zone-inner">
         <div class="card tbl-card" style="flex:0 0 296px;">
-          <div class="tbl-title">Федеральные округа</div>
+          <div class="tbl-title">Федеральные округа <span style="font-weight:400;color:var(--muted);font-size:8px;">РФ + Иностр. в РФ</span></div>
           <table id="foTable"><tbody></tbody></table>
         </div>
         <div class="card tbl-card" style="flex:1;">
@@ -590,7 +589,7 @@ td:last-child { width: 55%; }
       <div class="zone-inner">
         <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:0;">
           <div class="card tbl-card" style="flex:1;">
-            <div class="tbl-title">Макрорегионы</div>
+            <div class="tbl-title">Макрорегионы <span style="font-weight:400;color:var(--muted);font-size:8px;">Иностр. + Соотеч.</span></div>
             <table id="macroTable"><tbody></tbody></table>
           </div>
           <div class="extra-cards">
@@ -985,7 +984,7 @@ function clearCompareDate() {
 /* ── Обработка данных ── */
 function processData(rawData) {
   window._lastRawData = rawData; // сохраняем для пересчёта при смене даты сравнения
-  const mk = () => ({ d:0,d14:0,d35:0,r:0,r14:0,r35:0,essay:0,essay14:0,essay35:0,video:0,video14:0,video35:0,p:0 });
+  const mk = () => ({ d:0,d14:0,d35:0,r:0,r14:0,r35:0,essay:0,essay14:0,essay35:0,video:0,video14:0,video35:0,p:0,p14:0,p35:0 });
   const cats = { russian:mk(), foreignRF:mk(), foreign:mk(), compatriot:mk() };
   let totalAll=0, total14=0, total35=0;
   const fo={}, macro={}, regs={}, countries={};
@@ -1027,14 +1026,18 @@ function processData(rawData) {
     }
     // Полный профиль (независимо от статуса)
     const profileFull = parseBool(row['Профиль заполнен полностью']);
-    if (profileFull) cats[cat].p++;
+    if (profileFull) { cats[cat].p++; if (is14) cats[cat].p14++; else cats[cat].p35++; }
 
     const foV  = String(row['Федеральный округ']||'').trim();
     const macV = String(row['Макрорегион']||'').trim();
     const regV = String(row['Регион проживания']||'').trim();
     const cntV = String(row['Страна проживания']||'').trim();
-    if (foV  && foV  !== 'Нет ФО')    fo[foV]    = (fo[foV]   ||0)+1;
-    if (macV && macV !== 'Нет макро') macro[macV] = (macro[macV]||0)+1;
+    // ФО — только Российские участники + Иностранцы в РФ (проживают в РФ)
+    if (foV && foV !== 'Нет ФО' && isRfRes)
+      fo[foV] = (fo[foV]||0)+1;
+    // Макрорегионы — только Иностранные + Соотечественники (проживают не в РФ)
+    if (macV && macV !== 'Нет макро' && !isRfRes)
+      macro[macV] = (macro[macV]||0)+1;
     if (regV && isRfRes)               regs[regV]  = (regs[regV] ||0)+1;
     if (cntV && cntV !== 'Россия')     countries[cntV] = (countries[cntV]||0)+1;
 
@@ -1110,7 +1113,7 @@ function calcDayGrowth(rawData) {
     dr:0, dr14:0, dr35:0,
     essay:0, essay14:0, essay35:0,
     video:0, video14:0, video35:0,
-    p:0,
+    p:0, p14:0, p35:0,
     regionalTotal:0, regionalCountries: new Set(),
     travelTotal:0,   travelCountries:   new Set(),
   });
@@ -1160,7 +1163,7 @@ function calcDayGrowth(rawData) {
         if (essay !== '') { cnt.essay++; if (is14) cnt.essay14++; else cnt.essay35++; }
         if (video !== '') { cnt.video++; if (is14) cnt.video14++; else cnt.video35++; }
       }
-      if (profileFull) cnt.p++;
+      if (profileFull) { cnt.p++; if (is14) cnt.p14++; else cnt.p35++; }
       if (cntV && cntV !== 'Россия') {
         if (rp === 'Да') { cnt.regionalTotal++; cnt.regionalCountries.add(cntV); }
         if (te === 'Да') { cnt.travelTotal++;   cnt.travelCountries.add(cntV); }
@@ -1190,6 +1193,8 @@ function calcDayGrowth(rawData) {
     result[`total_${sfx}14`] = d(t.total14,  y.total14);
     result[`total_${sfx}35`] = d(t.total35,  y.total35);
     result[`dr_${sfx}`]      = d(t.p,        y.p);
+    result[`dr_${sfx}14`]    = d(t.p14,      y.p14);
+    result[`dr_${sfx}35`]    = d(t.p35,      y.p35);
     result[`dr_${sfx}14`]    = d(t.dr14,     y.dr14);
     result[`dr_${sfx}35`]    = d(t.dr35,     y.dr35);
     result[`es_${sfx}`]      = d(t.essay,    y.essay);
@@ -1456,14 +1461,14 @@ function updateUI(s) {
   .forEach(([id,key]) => {
     const c = s.cats[key];
     // Полный профиль
-    setText(`dr_${id}`, c.p); setText(`dr_${id}14`, c.d14); setText(`dr_${id}35`, c.d35);
+    setText(`dr_${id}`, c.p); setText(`dr_${id}14`, c.p14); setText(`dr_${id}35`, c.p35);
     // Выполнено эссе
     setText(`es_${id}`, c.essay); setText(`es_${id}14`, c.essay14); setText(`es_${id}35`, c.essay35);
     // Выполнена видеовизитка
     setText(`vi_${id}`, c.video); setText(`vi_${id}14`, c.video14); setText(`vi_${id}35`, c.video35);
   });
   // Итог ВСЕГО
-  setText('dr_total',  s.total.p);     setText('dr_total14', s.total.d14); setText('dr_total35', s.total.d35);
+  setText('dr_total',  s.total.p);     setText('dr_total14', s.total.p14); setText('dr_total35', s.total.p35);
   setText('es_total',  s.total.essay); setText('es_total14', s.total.essay14); setText('es_total35', s.total.essay35);
   setText('vi_total',  s.total.video); setText('vi_total14', s.total.video14); setText('vi_total35', s.total.video35);
   setText('regionalTotal',     s.regional.total);
